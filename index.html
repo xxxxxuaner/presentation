@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Presentation</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      cursor: none;
+    }
+
+    #stage {
+      position: relative;
+      width: 100vw;
+      height: 56.25vw; /* 16:9 */
+      max-height: 100vh;
+      max-width: 177.78vh;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      pointer-events: none;
+    }
+    .slide.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .slide img,
+    .slide video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .slide.placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, sans-serif;
+      font-size: clamp(1rem, 3vw, 2rem);
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.05em;
+    }
+
+    #counter {
+      position: absolute;
+      bottom: 2%;
+      right: 2%;
+      font-family: system-ui, sans-serif;
+      font-size: clamp(0.6rem, 1.2vw, 1rem);
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.1em;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #cursor {
+      position: fixed;
+      width: 8px;
+      height: 8px;
+      background: rgba(255,255,255,0.6);
+      border-radius: 50%;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 9999;
+    }
+
+    /* ── BLINK SLIDE ── */
+    .slide-blink { background: #000; }
+
+    .slide-blink .blink-media {
+      position: absolute;
+      inset: 0;
+    }
+    .slide-blink .blink-media img,
+    .slide-blink .blink-media video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .slide-blink .blink-veil {
+      position: absolute;
+      inset: 0;
+      background: #000;
+      transition: opacity 0.08s ease;
+      z-index: 2;
+    }
+    .slide-blink.eyes-closed .blink-veil { opacity: 0; }
+
+    /* ── hidden streams ── */
+    #blink-cam {
+      position: fixed;
+      width: 1px; height: 1px;
+      opacity: 0; pointer-events: none;
+      top: 0; left: 0;
+    }
+  </style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<video id="blink-cam" autoplay playsinline muted></video>
+<audio id="gradi-audio" src="gradi-vox.mp3" preload="auto"></audio>
+
+<div id="stage">
+
+  <!-- ═══════════════════════════════════════════
+       SLIDES
+
+       Normal image:   <div class="slide"><img src="…" /></div>
+       Normal video:   <div class="slide"><video src="…" autoplay muted loop playsinline></video></div>
+
+       Blink slide (visible only while eyes closed):
+         <div class="slide slide-blink">
+           <div class="blink-media"><img src="…" /></div>
+           <div class="blink-veil"></div>
+         </div>
+  ════════════════════════════════════════════ -->
+
+  <div class="slide active placeholder">
+    <img src="1.png" alt="" />
+  </div>
+
+  <div class="slide placeholder">
+    <video src="2.mp4" autoplay loop playsinline></video>
+  </div>
+
+  <!-- BLINK SLIDE -->
+  <div class="slide slide-blink">
+    <div class="blink-media">
+      <img src="blink-content.jpg" alt="" />
+    </div>
+    <div class="blink-veil"></div>
+  </div>
+
+  <!-- GRADI-VOX SLIDE (slide 4) — AI voice mirrors your speech -->
+  <div class="slide placeholder" style="background:#100d0a;">
+    Slide 4 — add your image or video here
+  </div>
+
+  <div class="slide placeholder" style="background:#0d100a;">
+    Slide 5 — add your image or video here
+  </div>
+
+  <div id="counter"></div>
+</div>
+
+<script>
+  /* ═══════════════════════════════════════════════
+     SLIDE ENGINE
+  ═══════════════════════════════════════════════ */
+  const slides  = Array.from(document.querySelectorAll('.slide'));
+  const counter = document.getElementById('counter');
+  let current   = 0;
+
+  // Index of the gradi-vox slide (0-based). Change if you reorder slides.
+  const GRADI_SLIDE_INDEX = 3;
+
+  function goTo(index) {
+    const leaving = slides[current];
+    leaving.classList.remove('active');
+
+    const lv = leaving.querySelector('.blink-media video, video:not(#blink-cam)');
+    if (lv) lv.pause();
+
+    if (leaving.classList.contains('slide-blink')) stopBlinkLoop(leaving);
+    if (current === GRADI_SLIDE_INDEX) stopGradi();
+
+    current = (index + slides.length) % slides.length;
+    const entering = slides[current];
+    entering.classList.add('active');
+
+    const ev = entering.querySelector('.blink-media video, video:not(#blink-cam)');
+    if (ev) { ev.currentTime = 0; ev.play(); }
+
+    if (entering.classList.contains('slide-blink')) startBlinkLoop(entering);
+    if (current === GRADI_SLIDE_INDEX) startGradi();
+
+    counter.textContent = `${current + 1} / ${slides.length}`;
+  }
+
+  const next = () => goTo(current + 1);
+  const prev = () => goTo(current - 1);
+
+  counter.textContent = `1 / ${slides.length}`;
+  document.getElementById('stage').addEventListener('click', next);
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); next(); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); prev(); }
+  });
+
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend',   e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 40) dx < 0 ? next() : prev();
+  });
+
+  const cursorEl = document.getElementById('cursor');
+  document.addEventListener('mousemove', e => {
+    cursorEl.style.left = e.clientX + 'px';
+    cursorEl.style.top  = e.clientY + 'px';
+  });
+
+  /* ═══════════════════════════════════════════════
+     SHARED INIT — camera + mic in one permission prompt
+  ═══════════════════════════════════════════════ */
+  const camEl    = document.getElementById('blink-cam');
+  let audioStream = null;  // mic audio MediaStream, kept alive
+
+  (async function init() {
+    try {
+      // Request camera + mic together → single browser permission dialog
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: true,
+      });
+
+      // Split into separate streams
+      const videoStream = new MediaStream(stream.getVideoTracks());
+      const micStream   = new MediaStream(stream.getAudioTracks());
+
+      camEl.srcObject = videoStream;
+      await camEl.play();
+      audioStream = micStream;
+    } catch {
+      // Permissions denied — blink falls back to always visible,
+      // gradi-vox falls back to continuous playback
+    }
+
+    // Load MediaPipe in background (for blink slide)
+    loadMediaPipe().catch(() => {});
+  })();
+
+  /* ═══════════════════════════════════════════════
+     BLINK ENGINE
+  ═══════════════════════════════════════════════ */
+  const MEDIAPIPE_CDN   = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs';
+  const BLINK_THRESHOLD = 0.5;
+
+  let faceLandmarker   = null;
+  let blinkRafId       = null;
+  let blinkProcessing  = false;
+  let activeBlinkSlide = null;
+
+  async function loadMediaPipe() {
+    if (faceLandmarker) return faceLandmarker;
+    const { FaceLandmarker, FilesetResolver } =
+      await (new Function('u', 'return import(u)'))(MEDIAPIPE_CDN);
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
+    );
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        delegate: 'GPU',
+      },
+      outputFaceBlendshapes: true,
+      runningMode: 'VIDEO',
+      numFaces: 1,
+    });
+    return faceLandmarker;
+  }
+
+  function startBlinkLoop(slide) {
+    activeBlinkSlide = slide;
+    if (!faceLandmarker) {
+      const wait = setInterval(() => {
+        if (!faceLandmarker) return;
+        clearInterval(wait);
+        if (activeBlinkSlide === slide) runBlinkDetection(slide);
+        else slide.classList.add('eyes-closed');
+      }, 300);
+      return;
+    }
+    runBlinkDetection(slide);
+  }
+
+  function runBlinkDetection(slide) {
+    const loop = () => {
+      if (activeBlinkSlide !== slide) return;
+      if (!blinkProcessing && camEl.readyState >= 2) {
+        blinkProcessing = true;
+        const result = faceLandmarker.detectForVideo(camEl, performance.now());
+        if (result.faceBlendshapes?.length > 0) {
+          const cats = result.faceBlendshapes[0].categories;
+          const closed = cats[9]?.score > BLINK_THRESHOLD || cats[10]?.score > BLINK_THRESHOLD;
+          slide.classList.toggle('eyes-closed', closed);
+        }
+        blinkProcessing = false;
+      }
+      blinkRafId = requestAnimationFrame(loop);
+    };
+    blinkRafId = requestAnimationFrame(loop);
+  }
+
+  function stopBlinkLoop(slide) {
+    activeBlinkSlide = null;
+    cancelAnimationFrame(blinkRafId);
+    blinkRafId = null;
+    blinkProcessing = false;
+    slide.classList.remove('eyes-closed');
+  }
+
+  /* ═══════════════════════════════════════════════
+     GRADI-VOX ENGINE
+     Plays gradi-vox.mp3 only while the user is
+     speaking; pauses on silence; resumes from the
+     same position when speech resumes.
+  ═══════════════════════════════════════════════ */
+  const SPEAK_THRESHOLD  = 12;   // RMS amplitude 0-255; raise to require louder voice
+  const SPEAK_HOLD_MS    = 180;  // ms of silence before considered stopped speaking
+  const RESUME_HOLD_MS   = 80;   // ms of speech before considered started speaking
+
+  const gradiAudio = document.getElementById('gradi-audio');
+  let gradiActive  = false;      // true while on gradi slide
+  let gradiRafId   = null;
+  let vadCtx       = null;       // AudioContext for VAD
+  let vadAnalyser  = null;
+  let vadData      = null;
+  let isSpeaking   = false;
+  let speakTimer   = null;       // debounce timers
+  let silenceTimer = null;
+
+  function startGradi() {
+    gradiActive = true;
+    gradiAudio.currentTime = 0;  // always start from beginning when entering slide
+
+    if (!audioStream) {
+      // No mic — play continuously
+      gradiAudio.play().catch(() => {});
+      return;
+    }
+
+    // Set up Web Audio amplitude analyser on the mic stream
+    if (!vadCtx) {
+      vadCtx     = new AudioContext();
+      const src  = vadCtx.createMediaStreamSource(audioStream);
+      vadAnalyser = vadCtx.createAnalyser();
+      vadAnalyser.fftSize = 512;
+      src.connect(vadAnalyser);
+      vadData = new Uint8Array(vadAnalyser.frequencyBinCount);
+    } else if (vadCtx.state === 'suspended') {
+      vadCtx.resume();
+    }
+
+    isSpeaking = false;
+    speakTimer = null;
+    silenceTimer = null;
+
+    runVAD();
+  }
+
+  function runVAD() {
+    const tick = () => {
+      if (!gradiActive) return;
+
+      vadAnalyser.getByteFrequencyData(vadData);
+      let sum = 0;
+      for (let i = 0; i < vadData.length; i++) sum += vadData[i];
+      const rms = sum / vadData.length;
+
+      if (rms > SPEAK_THRESHOLD) {
+        // amplitude above threshold → speech signal
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+
+        if (!isSpeaking && !speakTimer) {
+          // hold before confirming speech start (avoids false triggers)
+          speakTimer = setTimeout(() => {
+            speakTimer = null;
+            if (gradiActive) {
+              isSpeaking = true;
+              gradiAudio.play().catch(() => {});
+            }
+          }, RESUME_HOLD_MS);
+        }
+      } else {
+        // amplitude below threshold → silence
+        clearTimeout(speakTimer);
+        speakTimer = null;
+
+        if (isSpeaking && !silenceTimer) {
+          silenceTimer = setTimeout(() => {
+            silenceTimer = null;
+            if (gradiActive) {
+              isSpeaking = false;
+              gradiAudio.pause();
+            }
+          }, SPEAK_HOLD_MS);
+        }
+      }
+
+      gradiRafId = requestAnimationFrame(tick);
+    };
+    gradiRafId = requestAnimationFrame(tick);
+  }
+
+  function stopGradi() {
+    gradiActive = false;
+    cancelAnimationFrame(gradiRafId);
+    gradiRafId = null;
+    clearTimeout(speakTimer);
+    clearTimeout(silenceTimer);
+    speakTimer = null;
+    silenceTimer = null;
+    isSpeaking = false;
+    gradiAudio.pause();
+    gradiAudio.currentTime = 0;
+    if (vadCtx) vadCtx.suspend();
+  }
+</script>
+</body>
+</html>
