@@ -35,7 +35,7 @@
       pointer-events: none;
     }
     .slide.active {
-      opacity: 1;
+      opacity: var(--presentation-opacity, 1);
       pointer-events: all;
     }
 
@@ -78,6 +78,25 @@
       pointer-events: none;
       transform: translate(-50%, -50%);
       z-index: 9999;
+    }
+
+    #attention-meter {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 2px;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    #attention-meter-fill {
+      width: 100%;
+      height: 100%;
+      background: rgba(255,255,255,0.9);
+      transform-origin: left center;
+      transform: scaleX(var(--presentation-opacity, 1));
+      transition: transform 0.18s ease;
     }
 
     /* ── BLINK SLIDE ── */
@@ -145,7 +164,7 @@
   <!-- BLINK SLIDE -->
   <div class="slide slide-blink">
     <div class="blink-media">
-      <img src="blink-content.jpg" alt="" />
+      <img src="blink-content.png" alt="" />
     </div>
     <div class="blink-veil"></div>
   </div>
@@ -160,6 +179,9 @@
   </div>
 
   <div id="counter"></div>
+  <div id="attention-meter" aria-hidden="true">
+    <div id="attention-meter-fill"></div>
+  </div>
 </div>
 
 <script>
@@ -168,7 +190,51 @@
   ═══════════════════════════════════════════════ */
   const slides  = Array.from(document.querySelectorAll('.slide'));
   const counter = document.getElementById('counter');
+  const root    = document.documentElement;
   let current   = 0;
+  let attentionSignalTimer = null;
+
+  const ATTENTION_SIGNAL_TIMEOUT_MS = 2000;
+
+  function clamp01(value) {
+    if (!Number.isFinite(value)) return 1;
+    return Math.max(0, Math.min(1, value));
+  }
+
+  function setPresentationOpacity(value) {
+    root.style.setProperty('--presentation-opacity', clamp01(value).toFixed(4));
+  }
+
+  function defaultPresentationOpacity() {
+    setPresentationOpacity(1);
+  }
+
+  function markAttentionSignalReceived() {
+    clearTimeout(attentionSignalTimer);
+    attentionSignalTimer = setTimeout(defaultPresentationOpacity, ATTENTION_SIGNAL_TIMEOUT_MS);
+  }
+
+  function connectAttentionSidecar() {
+    const socket = new WebSocket('ws://localhost:8765');
+
+    socket.addEventListener('message', event => {
+      try {
+        const payload = JSON.parse(event.data);
+        setPresentationOpacity(Number(payload.attention));
+        markAttentionSignalReceived();
+      } catch {}
+    });
+
+    socket.addEventListener('close', () => {
+      defaultPresentationOpacity();
+      setTimeout(connectAttentionSidecar, 1000);
+    });
+
+    socket.addEventListener('error', defaultPresentationOpacity);
+  }
+
+  defaultPresentationOpacity();
+  connectAttentionSidecar();
 
   // Index of the gradi-vox slide (0-based). Change if you reorder slides.
   const GRADI_SLIDE_INDEX = 3;

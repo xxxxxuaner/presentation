@@ -8,3 +8,19 @@
 *.webm
 *.gif
 *.svg
+
+# crowd-attention media
+/crowd-attention/**/*.png
+/crowd-attention/**/*.jpg
+/crowd-attention/**/*.jpeg
+/crowd-attention/**/*.webp
+/crowd-attention/**/*.mp4
+/crowd-attention/**/*.mp3
+/crowd-attention/**/*.webm
+/crowd-attention/**/*.gif
+/crowd-attention/**/*.svg
+
+# local artifacts
+.DS_Store
+**/.DS_Store
+/crowd-attention/.venv/

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Attention Monitor</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #111;
+        color: #f5f5f5;
+      }
+
+      main {
+        width: min(960px, calc(100vw - 32px));
+      }
+
+      h1 {
+        margin: 0 0 16px;
+        font-size: 24px;
+        font-weight: 650;
+      }
+
+      .status {
+        margin-bottom: 24px;
+        color: #aaa;
+        font-size: 14px;
+      }
+
+      .value {
+        font-variant-numeric: tabular-nums;
+        font-size: 72px;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .preview {
+        display: none;
+        width: 100%;
+        margin: 24px 0 0;
+        background: #222;
+      }
+
+      .preview.visible {
+        display: block;
+      }
+
+      .bar {
+        height: 24px;
+        margin-top: 24px;
+        background: #333;
+        overflow: hidden;
+      }
+
+      .fill {
+        width: 0%;
+        height: 100%;
+        background: #32c766;
+        transition: width 120ms linear, background-color 120ms linear;
+      }
+
+      .meta {
+        margin-top: 16px;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        color: #aaa;
+        font-size: 14px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      button {
+        margin-top: 24px;
+        padding: 10px 14px;
+        border: 1px solid #555;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: #888;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Attention Monitor</h1>
+      <div id="status" class="status">Connecting to ws://localhost:8765...</div>
+      <div id="value" class="value">--</div>
+      <div class="bar" aria-label="attention level">
+        <div id="fill" class="fill"></div>
+      </div>
+      <img id="preview" class="preview" alt="Annotated attention preview">
+      <div class="meta">
+        <span id="percent">0%</span>
+        <span id="updated">No data yet</span>
+      </div>
+      <button id="reconnect" type="button">Reconnect</button>
+    </main>
+
+    <script>
+      const url = "ws://localhost:8765";
+      const statusEl = document.getElementById("status");
+      const valueEl = document.getElementById("value");
+      const fillEl = document.getElementById("fill");
+      const previewEl = document.getElementById("preview");
+      const percentEl = document.getElementById("percent");
+      const updatedEl = document.getElementById("updated");
+      const reconnectEl = document.getElementById("reconnect");
+
+      let socket = null;
+
+      function clamp01(value) {
+        if (!Number.isFinite(value)) return 0;
+        return Math.max(0, Math.min(1, value));
+      }
+
+      function setAttention(value) {
+        const attention = clamp01(value);
+        const percent = Math.round(attention * 100);
+        valueEl.textContent = attention.toFixed(3);
+        percentEl.textContent = `${percent}%`;
+        fillEl.style.width = `${percent}%`;
+        fillEl.style.backgroundColor =
+          attention >= 0.7 ? "#32c766" : attention >= 0.4 ? "#e5b82e" : "#d94c4c";
+        updatedEl.textContent = new Date().toLocaleTimeString();
+      }
+
+      function connect() {
+        if (socket) {
+          socket.close();
+        }
+
+        statusEl.textContent = `Connecting to ${url}...`;
+        socket = new WebSocket(url);
+
+        socket.addEventListener("open", () => {
+          statusEl.textContent = `Connected to ${url}`;
+        });
+
+        socket.addEventListener("message", (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            setAttention(Number(payload.attention));
+            if (typeof payload.frame === "string") {
+              previewEl.src = payload.frame;
+              previewEl.classList.add("visible");
+            }
+          } catch {
+            statusEl.textContent = "Received invalid JSON";
+          }
+        });
+
+        socket.addEventListener("close", () => {
+          statusEl.textContent = "Disconnected";
+        });
+
+        socket.addEventListener("error", () => {
+          statusEl.textContent = "Connection error";
+        });
+      }
+
+      reconnectEl.addEventListener("click", connect);
+      connect();
+    </script>
+  </body>
+</html>
